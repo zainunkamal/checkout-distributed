@@ -1,0 +1,39 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # UI: http://localhost:15672 (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  service-b:            # Layanan B: Inventory + Notification worker
+    build: ./service_b
+    ports:
+      - "8001:8001"
+    environment:
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      DB_PATH: /data/inventory.db
+    volumes:
+      - b-data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  service-a:            # Layanan A: Order / Checkout API
+    build: ./service_a
+    ports:
+      - "8000:8000"
+    environment:
+      INVENTORY_URL: http://service-b:8001
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      INVENTORY_TIMEOUT: "2"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  b-data:
